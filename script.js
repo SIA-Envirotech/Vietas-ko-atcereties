@@ -3176,11 +3176,11 @@ function saveRoundResultToArcGIS({
       correct_y: correctPoint.y,
       created_at: Date.now()
     },
-    geometry: {
-      x: correctPoint.x,
-      y: correctPoint.y,
-      spatialReference: correctPoint.spatialReference
-    }
+  geometry: {
+  x: guessPoint.x,
+  y: guessPoint.y,
+  spatialReference: guessPoint.spatialReference
+}
   };
 
   console.log("Saving round result feature:", feature);
