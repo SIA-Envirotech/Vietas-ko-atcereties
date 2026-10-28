@@ -39,18 +39,18 @@ $arcgis
 const ROUND_RESULTS_LAYER_URL =
   "https://services1.arcgis.com/qbu95DaOMntesDTa/arcgis/rest/services/Punktu_lok%C4%81cija/FeatureServer/0";
 
-let currentGameUid = null;
+let currentGameId = null;
 
-function getCurrentGameUid() {
-  if (!currentGameUid) {
-    currentGameUid =
+function getCurrentGameId() {
+  if (!currentGameId) {
+    currentGameId =
       "game_" +
       Date.now() +
       "_" +
       Math.random().toString(36).slice(2, 8);
   }
 
-  return currentGameUid;
+  return currentGameId;
 }
             const $ = (id) =>
                 document.getElementById(id);
@@ -3082,33 +3082,40 @@ function calculateCustomScore( distanceMeters, rule, scoring ) {
     return titles.veryFar ||
         "Nākreiz sanāks!";
 }
-         function getPointXY(geometry) {
+       function getPointForSaving(geometry) {
   if (!geometry) {
     return null;
   }
 
+  let pointGeometry = null;
+
   if (geometry.type === "point") {
-    return {
-      x: geometry.longitude ?? geometry.x,
-      y: geometry.latitude ?? geometry.y
-    };
+    pointGeometry = geometry;
+  } else if (geometry.extent && geometry.extent.center) {
+    pointGeometry = geometry.extent.center;
+  } else if (geometry.centroid) {
+    pointGeometry = geometry.centroid;
   }
 
-  if (geometry.extent && geometry.extent.center) {
-    return {
-      x: geometry.extent.center.longitude ?? geometry.extent.center.x,
-      y: geometry.extent.center.latitude ?? geometry.extent.center.y
-    };
+  if (!pointGeometry) {
+    return null;
   }
 
-  if (geometry.centroid) {
-    return {
-      x: geometry.centroid.longitude ?? geometry.centroid.x,
-      y: geometry.centroid.latitude ?? geometry.centroid.y
-    };
+  const x = pointGeometry.x ?? pointGeometry.longitude;
+  const y = pointGeometry.y ?? pointGeometry.latitude;
+
+  if (x == null || y == null) {
+    return null;
   }
 
-  return null;
+  return {
+    x,
+    y,
+    spatialReference:
+      pointGeometry.spatialReference ||
+      geometry.spatialReference ||
+      { wkid: 4326 }
+  };
 }
 
 function saveRoundResultToArcGIS({
@@ -3119,42 +3126,52 @@ function saveRoundResultToArcGIS({
   roundScore
 }) {
   if (!ROUND_RESULTS_LAYER_URL) {
+    console.warn("ROUND_RESULTS_LAYER_URL is missing.");
     return;
   }
 
   if (!targetLandmark || !clickedPoint || !targetGeometry) {
+    console.warn("Cannot save round result: missing data.", {
+      targetLandmark,
+      clickedPoint,
+      targetGeometry
+    });
     return;
   }
 
   const attrs = targetLandmark.attributes || {};
-  const correctPoint = getPointXY(targetGeometry);
-  const guessX = clickedPoint.longitude ?? clickedPoint.x;
-  const guessY = clickedPoint.latitude ?? clickedPoint.y;
+  const correctPoint = getPointForSaving(targetGeometry);
+  const guessPoint = getPointForSaving(clickedPoint);
 
-  if (!correctPoint || guessX == null || guessY == null) {
-    console.warn("Cannot save round result: missing coordinates.");
+  if (!correctPoint || !guessPoint) {
+    console.warn("Cannot save round result: missing coordinates.", {
+      correctPoint,
+      guessPoint,
+      targetGeometry,
+      clickedPoint
+    });
     return;
   }
 
   const landmarkId =
+    attrs.FID ??
     attrs.OBJECTID ??
     attrs.ObjectId ??
     attrs.ObjectID ??
-    attrs.FID ??
     attrs.GlobalID ??
     "";
 
   const feature = {
     attributes: {
-      game_id: getCurrentGameUid(),
+      game_id: getCurrentGameId(),
       landmark_id: String(landmarkId),
       landmark_name: getLandmarkName(targetLandmark),
       distance_m: Number.isFinite(distanceInMeters)
         ? Math.round(distanceInMeters)
         : null,
       round_score: roundScore,
-      guess_x: guessX,
-      guess_y: guessY,
+      guess_x: guessPoint.x,
+      guess_y: guessPoint.y,
       correct_x: correctPoint.x,
       correct_y: correctPoint.y,
       created_at: Date.now()
@@ -3162,11 +3179,11 @@ function saveRoundResultToArcGIS({
     geometry: {
       x: correctPoint.x,
       y: correctPoint.y,
-      spatialReference: {
-        wkid: 4326
-      }
+      spatialReference: correctPoint.spatialReference
     }
   };
+
+  console.log("Saving round result feature:", feature);
 
   const params = new URLSearchParams();
   params.append("f", "json");
@@ -3178,12 +3195,22 @@ function saveRoundResultToArcGIS({
   })
     .then((response) => response.json())
     .then((data) => {
+      console.log("ArcGIS addFeatures response:", data);
+
       if (data.error) {
         console.error("ArcGIS save error:", data.error);
         return;
       }
 
-      console.log("Round result saved:", data);
+      if (
+        data.addResults &&
+        data.addResults.length &&
+        data.addResults[0].success
+      ) {
+        console.log("Round result saved successfully:", data.addResults[0]);
+      } else {
+        console.error("Round result was not saved:", data);
+      }
     })
     .catch((error) => {
       console.error("Could not save round result:", error);
