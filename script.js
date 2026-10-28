@@ -36,7 +36,22 @@ $arcgis
 
             const LEADERBOARD =
                 CONFIG.leaderboard || {};
+const ROUND_RESULTS_LAYER_URL =
+  "https://services1.arcgis.com/qbu95DaOMntesDTa/arcgis/rest/services/Punktu_lok%C4%81cija/FeatureServer/0";
 
+let currentGameUid = null;
+
+function getCurrentGameUid() {
+  if (!currentGameUid) {
+    currentGameUid =
+      "game_" +
+      Date.now() +
+      "_" +
+      Math.random().toString(36).slice(2, 8);
+  }
+
+  return currentGameUid;
+}
             const $ = (id) =>
                 document.getElementById(id);
 
@@ -3067,6 +3082,113 @@ function calculateCustomScore( distanceMeters, rule, scoring ) {
     return titles.veryFar ||
         "Nākreiz sanāks!";
 }
+         function getPointXY(geometry) {
+  if (!geometry) {
+    return null;
+  }
+
+  if (geometry.type === "point") {
+    return {
+      x: geometry.longitude ?? geometry.x,
+      y: geometry.latitude ?? geometry.y
+    };
+  }
+
+  if (geometry.extent && geometry.extent.center) {
+    return {
+      x: geometry.extent.center.longitude ?? geometry.extent.center.x,
+      y: geometry.extent.center.latitude ?? geometry.extent.center.y
+    };
+  }
+
+  if (geometry.centroid) {
+    return {
+      x: geometry.centroid.longitude ?? geometry.centroid.x,
+      y: geometry.centroid.latitude ?? geometry.centroid.y
+    };
+  }
+
+  return null;
+}
+
+function saveRoundResultToArcGIS({
+  targetLandmark,
+  targetGeometry,
+  clickedPoint,
+  distanceInMeters,
+  roundScore
+}) {
+  if (!ROUND_RESULTS_LAYER_URL) {
+    return;
+  }
+
+  if (!targetLandmark || !clickedPoint || !targetGeometry) {
+    return;
+  }
+
+  const attrs = targetLandmark.attributes || {};
+  const correctPoint = getPointXY(targetGeometry);
+  const guessX = clickedPoint.longitude ?? clickedPoint.x;
+  const guessY = clickedPoint.latitude ?? clickedPoint.y;
+
+  if (!correctPoint || guessX == null || guessY == null) {
+    console.warn("Cannot save round result: missing coordinates.");
+    return;
+  }
+
+  const landmarkId =
+    attrs.OBJECTID ??
+    attrs.ObjectId ??
+    attrs.ObjectID ??
+    attrs.FID ??
+    attrs.GlobalID ??
+    "";
+
+  const feature = {
+    attributes: {
+      game_id: getCurrentGameUid(),
+      landmark_id: String(landmarkId),
+      landmark_name: getLandmarkName(targetLandmark),
+      distance_m: Number.isFinite(distanceInMeters)
+        ? Math.round(distanceInMeters)
+        : null,
+      round_score: roundScore,
+      guess_x: guessX,
+      guess_y: guessY,
+      correct_x: correctPoint.x,
+      correct_y: correctPoint.y,
+      created_at: Date.now()
+    },
+    geometry: {
+      x: correctPoint.x,
+      y: correctPoint.y,
+      spatialReference: {
+        wkid: 4326
+      }
+    }
+  };
+
+  const params = new URLSearchParams();
+  params.append("f", "json");
+  params.append("features", JSON.stringify([feature]));
+
+  fetch(ROUND_RESULTS_LAYER_URL + "/addFeatures", {
+    method: "POST",
+    body: params
+  })
+    .then((response) => response.json())
+    .then((data) => {
+      if (data.error) {
+        console.error("ArcGIS save error:", data.error);
+        return;
+      }
+
+      console.log("Round result saved:", data);
+    })
+    .catch((error) => {
+      console.error("Could not save round result:", error);
+    });
+}
          function confirmGuess() {
 
                 if (
@@ -3307,7 +3429,13 @@ if ( gotFullPoints ) {
         0
     );
 }
-
+saveRoundResultToArcGIS({
+  targetLandmark,
+  targetGeometry,
+  clickedPoint,
+  distanceInMeters,
+  roundScore
+});
 totalScore +=
     roundScore;
 
