@@ -323,7 +323,7 @@ startButton:
     enabled: true,
 
     survey123Url:
-        "https://survey123.arcgis.com/share/5b010f14c79246d0b8fb86b51e04f332?portalUrl=https://envirotech.maps.arcgis.com",
+        "links",
 
     submitScoreFieldId:
         "rezult_ts",
