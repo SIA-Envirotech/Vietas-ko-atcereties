@@ -323,13 +323,13 @@ startButton:
     enabled: true,
 
     survey123Url:
-        "https://survey123.arcgis.com/share/ffe35941b9854d71a668b2fd5f5a806f?portalUrl=https://envirotech.maps.arcgis.com",
+        "https://survey123.arcgis.com/share/e8ffbddb8279444397e2bdae7761b793?portalUrl=https://envirotech.maps.arcgis.com",
 
     submitScoreFieldId:
         "rezult_ts",
 
     dataApiUrl:
-        "https://services1.arcgis.com/qbu95DaOMntesDTa/arcgis/rest/services/survey123_ffe35941b9854d71a668b2fd5f5a806f_results/FeatureServer",
+        "https://services1.arcgis.com/qbu95DaOMntesDTa/arcgis/rest/services/survey123_e8ffbddb8279444397e2bdae7761b793_results/FeatureServer",
 
     firstNameField:
         "v_rds",
